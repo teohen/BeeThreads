@@ -384,7 +384,21 @@ interface TurboMessage {
   outputBuffer?: SharedArrayBuffer;
   controlBuffer?: SharedArrayBuffer;
   initialValue?: unknown;
+  elementType?: string;
 }
+
+/** Map typed array constructor name to constructor function. */
+const TYPED_ARRAY_CTORS: Record<string, new (buffer: SharedArrayBuffer) => { [index: number]: number; length: number }> = {
+  Float64Array,
+  Float32Array,
+  Int32Array,
+  Int16Array,
+  Int8Array,
+  Uint32Array,
+  Uint16Array,
+  Uint8Array,
+  Uint8ClampedArray,
+};
 
 function isTurboMessage(msg: unknown): msg is TurboMessage {
   return msg !== null && typeof msg === 'object' && 'type' in msg &&
@@ -399,7 +413,7 @@ function isTurboMessage(msg: unknown): msg is TurboMessage {
  * Uses structuredClone for data transfer (handled by postMessage).
  */
 function handleTurboMessage(message: TurboMessage): void {
-  const { type, fn: fnSrc, chunk, startIndex, endIndex, context, inputBuffer, outputBuffer, controlBuffer: turboControl, initialValue } = message;
+  const { type, fn: fnSrc, chunk, startIndex, endIndex, context, inputBuffer, outputBuffer, controlBuffer: turboControl, initialValue, elementType } = message;
 
   try {
     // Compile the function
@@ -411,8 +425,9 @@ function handleTurboMessage(message: TurboMessage): void {
 
     // SharedArrayBuffer mode (for TypedArrays)
     if (inputBuffer && outputBuffer) {
-      // Detect the TypedArray type from buffer size and indices
-      const inputView = new Float64Array(inputBuffer);
+      // Use matching TypedArray view for exact element size (not always Float64)
+      const InputCtor = TYPED_ARRAY_CTORS[elementType ?? 'Float64Array'];
+      const inputView = new InputCtor(inputBuffer);
       const outputView = new Float64Array(outputBuffer);
       const start = startIndex ?? 0;
       const end = endIndex ?? inputView.length;

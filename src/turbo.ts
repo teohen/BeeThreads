@@ -76,6 +76,7 @@ interface TurboWorkerMessage {
   controlBuffer: SharedArrayBuffer | undefined;
   chunk: unknown[] | undefined;
   initialValue: unknown | undefined;
+  elementType: string | undefined;
 }
 
 // Monomorphic response shape
@@ -236,17 +237,18 @@ async function executeTurboTypedArray<T>(
   startTime: number
 ): Promise<TurboResult<T>> {
   const dataLength = data.length;
+  const bpe = data.BYTES_PER_ELEMENT;
 
   // Create SharedArrayBuffers (V8: direct construction)
-  const inputBuffer = new SharedArrayBuffer(dataLength * 8);
+  // Size input SAB to match actual element size, not always 8 bytes
+  const inputBuffer = new SharedArrayBuffer(dataLength * bpe);
   const outputBuffer = new SharedArrayBuffer(dataLength * 8);
   const controlBuffer = new SharedArrayBuffer(4);
 
-  // Copy input data (V8: raw for loop)
-  const inputView = new Float64Array(inputBuffer);
-  for (let i = 0; i < dataLength; i++) {
-    inputView[i] = data[i];
-  }
+  // Copy input data — use matching typed array view for exact element size
+  const InputCtor = data.constructor as new (buffer: SharedArrayBuffer) => NumericTypedArray;
+  const inputView = new InputCtor(inputBuffer);
+  inputView.set(data);
 
   const outputView = new Float64Array(outputBuffer);
   const controlView = new Int32Array(controlBuffer);
@@ -276,7 +278,8 @@ async function executeTurboTypedArray<T>(
       outputBuffer: outputBuffer,
       controlBuffer: controlBuffer,
       chunk: undefined,
-      initialValue: undefined
+      initialValue: undefined,
+      elementType: data.constructor.name
     };
 
     promises[i] = executeWorkerTurbo(fnHash, message);
@@ -680,7 +683,8 @@ function executeTurboChunkDirect<T>(
       outputBuffer: undefined,
       controlBuffer: undefined,
       chunk: chunk,
-      initialValue: undefined
+      initialValue: undefined,
+      elementType: undefined
     };
 
     worker.postMessage(message);
