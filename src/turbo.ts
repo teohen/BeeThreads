@@ -92,7 +92,7 @@ interface TurboWorkerResponse {
 // TYPED ARRAY DETECTION - V8 OPTIMIZED
 // ============================================================================
 
-type NumericTypedArray = 
+type NumericTypedArray =
   | Float64Array | Float32Array
   | Int32Array | Int16Array | Int8Array
   | Uint32Array | Uint16Array | Uint8Array | Uint8ClampedArray;
@@ -108,6 +108,22 @@ function isTypedArray(value: unknown): value is NumericTypedArray {
   return (value.constructor.name.charCodeAt(0) !== 68);
 }
 
+// ============================================================================
+// TYPED ARRAY HELPER — SharedArrayBuffer view with matching element size
+// ============================================================================
+
+/** Map typed array constructor name to constructor function. */
+const TYPED_ARRAY_CONSTRUCTORS: Record<string, new (buffer: SharedArrayBuffer) => { [index: number]: number; length: number; set(array: unknown, offset?: number): void }> = {
+  Float64Array,
+  Float32Array,
+  Int32Array,
+  Int16Array,
+  Int8Array,
+  Uint32Array,
+  Uint16Array,
+  Uint8Array,
+  Uint8ClampedArray,
+};
 
 // ============================================================================
 // TURBO EXECUTOR - NEW SYNTAX: turbo(arr).map(fn)
@@ -246,8 +262,9 @@ async function executeTurboTypedArray<T>(
   const controlBuffer = new SharedArrayBuffer(4);
 
   // Copy input data — use matching typed array view for exact element size
-  const InputCtor = data.constructor as new (buffer: SharedArrayBuffer) => NumericTypedArray;
-  const inputView = new InputCtor(inputBuffer);
+  const inputView = new TYPED_ARRAY_CONSTRUCTORS[data.constructor.name ?? 'Float64Array'](inputBuffer);
+
+  // uses .set() method because it uses memcpy/memmove to move the values directly on the C++ domain.
   inputView.set(data);
 
   const outputView = new Float64Array(outputBuffer);
@@ -329,7 +346,7 @@ async function executeTurboRegularArray<T>(
   startTime: number
 ): Promise<TurboResult<T>> {
   const dataLength = data.length;
-  
+
   // Calculate chunk boundaries (V8: pre-allocated, no slice yet)
   const chunkBounds: Array<{ start: number; end: number }> = new Array(numWorkers);
   let chunkCount = 0;
@@ -876,22 +893,22 @@ function compileWithContext(fnString: string, context?: Record<string, unknown>)
   if (!context || Object.keys(context).length === 0) {
     return new Function('return ' + fnString)();
   }
-  
+
   const contextKeys = Object.keys(context);
   const contextValues = contextKeys.map(k => context[k]);
-  
+
   const wrapperCode = `
     return function(${contextKeys.join(', ')}) {
       const fn = ${fnString};
       return fn;
     }
   `;
-  
+
   const wrapper = new Function(wrapperCode)();
   return wrapper(...contextValues);
 }
 
-export interface MaxOptions extends TurboOptions {}
+export interface MaxOptions extends TurboOptions { }
 
 /**
  * @experimental
@@ -977,7 +994,7 @@ async function executeMaxMapWithStats<T>(
   const calculatedWorkers = Math.ceil(dataLength / MIN_ITEMS_PER_WORKER);
   const numWorkers = calculatedWorkers < maxWorkers ? calculatedWorkers : maxWorkers;
   const actualWorkers = numWorkers > 1 ? numWorkers : 1;
-  
+
   // Main thread gets a chunk too
   const totalThreads = actualWorkers + 1;
   const chunkSize = options.chunkSize !== undefined ? options.chunkSize : Math.ceil(dataLength / totalThreads);
@@ -1029,9 +1046,9 @@ async function executeMaxMapWithStats<T>(
   // Main thread processes its chunk while workers run
   const mainChunk = chunkBounds[mainThreadChunkIndex];
   const mainChunkData = actualData.slice(mainChunk.start, mainChunk.end);
-  
+
   const fn = compileWithContext(fnString, options.context);
-  
+
   const mainResult: T[] = new Array(mainChunkData.length);
   for (let i = 0; i < mainChunkData.length; i++) {
     mainResult[i] = fn(mainChunkData[i], mainChunk.start + i);
@@ -1043,7 +1060,7 @@ async function executeMaxMapWithStats<T>(
   // Merge results
   let totalSize = 0;
   const offsets: number[] = new Array(chunkCount);
-  
+
   for (let i = 0; i < workerChunks; i++) {
     offsets[i] = totalSize;
     totalSize += workerResults[i].length;
@@ -1052,7 +1069,7 @@ async function executeMaxMapWithStats<T>(
   totalSize += mainResult.length;
 
   const result: T[] = new Array(totalSize);
-  
+
   for (let i = 0; i < workerChunks; i++) {
     const chunkResult = workerResults[i];
     const chunkLen = chunkResult.length;
@@ -1061,7 +1078,7 @@ async function executeMaxMapWithStats<T>(
       result[offset + j] = chunkResult[j];
     }
   }
-  
+
   const offset = offsets[mainThreadChunkIndex];
   for (let j = 0; j < mainResult.length; j++) {
     result[offset + j] = mainResult[j];
@@ -1106,7 +1123,7 @@ async function executeMaxFilter<T>(
   const maxWorkers = options.workers !== undefined ? options.workers : config.poolSize;
   const calculatedWorkers = Math.ceil(dataLength / MIN_ITEMS_PER_WORKER);
   const numWorkers = calculatedWorkers < maxWorkers ? calculatedWorkers : maxWorkers;
-  
+
   const totalThreads = numWorkers + 1;
   const chunkSize = Math.ceil(dataLength / totalThreads);
 
@@ -1157,7 +1174,7 @@ async function executeMaxFilter<T>(
 
   const result: T[] = new Array(totalSize);
   let offset = 0;
-  
+
   for (let i = 0; i < workerChunks; i++) {
     const chunkResult = workerResults[i];
     const chunkLen = chunkResult.length;
@@ -1165,7 +1182,7 @@ async function executeMaxFilter<T>(
       result[offset++] = chunkResult[j] as T;
     }
   }
-  
+
   for (let j = 0; j < mainResult.length; j++) {
     result[offset++] = mainResult[j];
   }
@@ -1196,7 +1213,7 @@ async function executeMaxReduce<R>(
   const maxWorkers = options.workers !== undefined ? options.workers : config.poolSize;
   const calculatedWorkers = Math.ceil(dataLength / MIN_ITEMS_PER_WORKER);
   const numWorkers = calculatedWorkers < maxWorkers ? calculatedWorkers : maxWorkers;
-  
+
   const totalThreads = numWorkers + 1;
   const chunkSize = Math.ceil(dataLength / totalThreads);
 

@@ -388,7 +388,7 @@ interface TurboMessage {
 }
 
 /** Map typed array constructor name to constructor function. */
-const TYPED_ARRAY_CTORS: Record<string, new (buffer: SharedArrayBuffer) => { [index: number]: number; length: number }> = {
+const TYPED_ARRAY_CONSTRUCTORS: Record<string, new (buffer: SharedArrayBuffer) => { [index: number]: number; length: number }> = {
   Float64Array,
   Float32Array,
   Int32Array,
@@ -426,8 +426,7 @@ function handleTurboMessage(message: TurboMessage): void {
     // SharedArrayBuffer mode (for TypedArrays)
     if (inputBuffer && outputBuffer) {
       // Use matching TypedArray view for exact element size (not always Float64)
-      const InputCtor = TYPED_ARRAY_CTORS[elementType ?? 'Float64Array'];
-      const inputView = new InputCtor(inputBuffer);
+      const inputView = new TYPED_ARRAY_CONSTRUCTORS[elementType ?? 'Float64Array'](inputBuffer);
       const outputView = new Float64Array(outputBuffer);
       const start = startIndex ?? 0;
       const end = endIndex ?? inputView.length;

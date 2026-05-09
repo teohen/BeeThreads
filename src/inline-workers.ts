@@ -226,8 +226,10 @@ function apply(fn, args) {
 // TURBO MODE HANDLER - V8 OPTIMIZED (uses structuredClone)
 // ============================================================================
 
+const TYPED_ARRAY_CONSTRUCTORS = { Float64Array, Float32Array, Int32Array, Int16Array, Int8Array, Uint32Array, Uint16Array, Uint8Array, Uint8ClampedArray };
+
 function handleTurbo(msg) {
-  const { type, fn: fnSrc, chunk, startIndex, endIndex, context, inputBuffer, outputBuffer, controlBuffer, initialValue, workerId } = msg;
+  const { type, fn: fnSrc, chunk, startIndex, endIndex, context, inputBuffer, outputBuffer, controlBuffer, initialValue, workerId, elementType } = msg;
   
   try {
     const fn = compile(fnSrc, context);
@@ -235,7 +237,8 @@ function handleTurbo(msg) {
     
     // SharedArrayBuffer mode (for TypedArrays)
     if (inputBuffer && outputBuffer) {
-      const inputView = new Float64Array(inputBuffer);
+      const InputCtor = TYPED_ARRAY_CONSTRUCTORS[elementType] || Float64Array;
+      const inputView = new TYPED_ARRAY_CONSTRUCTORS[elementType ?? 'Float64Array'](inputBuffer);
       const outputView = new Float64Array(outputBuffer);
       const start = startIndex || 0;
       const end = endIndex || inputView.length;
