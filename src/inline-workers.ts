@@ -237,7 +237,6 @@ function handleTurbo(msg) {
     
     // SharedArrayBuffer mode (for TypedArrays)
     if (inputBuffer && outputBuffer) {
-      const InputCtor = TYPED_ARRAY_CONSTRUCTORS[elementType] || Float64Array;
       const inputView = new TYPED_ARRAY_CONSTRUCTORS[elementType ?? 'Float64Array'](inputBuffer);
       const outputView = new Float64Array(outputBuffer);
       const start = startIndex || 0;
